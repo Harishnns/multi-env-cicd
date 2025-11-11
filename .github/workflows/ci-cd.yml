@@ -3,7 +3,7 @@ name: CI-CD (dev → staging)
 on:
   push:
     branches: [ main ]
-    # Uncomment if you want runs only when these change:
+    # Optional: run only when these change
     # paths: [ 'hello.sh', '.github/workflows/**' ]
   pull_request:
     branches: [ main ]
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 1) TEST across a small matrix
+  # 1) TEST across small matrix
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -29,11 +29,11 @@ jobs:
       - name: Show runner info
         run: uname -a || ver
         shell: bash
-      - name: Run hello.sh (should fail if script has errors)
+      - name: Run hello.sh (fails if script has errors)
         shell: bash
         run: bash -eo pipefail ./hello.sh
 
-  # 2) PACKAGE once and upload an artifact
+  # 2) PACKAGE and upload artifact
   package:
     needs: test
     runs-on: ubuntu-latest
@@ -51,14 +51,15 @@ jobs:
           name: app
           path: build.txt
 
-  # 3) DEPLOY to DEV automatically
+  # 3) DEPLOY to DEV (auto)
   deploy_dev:
     needs: package
     runs-on: ubuntu-latest
     environment:
       name: dev
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4            # <-- ensures hello.sh is present
+      - uses: actions/download-artifact@v4   # <-- brings build.txt
         with:
           name: app
           path: .
@@ -71,13 +72,14 @@ jobs:
           bash -eo pipefail ./hello.sh
           echo "Deployed to DEV"
 
-  # 4) DEPLOY to STAGING (requires approval in Environments)
+  # 4) DEPLOY to STAGING (requires approval)
   deploy_staging:
     needs: deploy_dev
     runs-on: ubuntu-latest
     environment:
-      name: staging   # add Required reviewers in Settings → Environments → staging
+      name: staging   # set Required reviewers in Settings → Environments → staging
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: app
