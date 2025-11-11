@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-echo "Hello from CI/CD pipeline"
+echo "Hello Everyone from CI/CD pipeline"
