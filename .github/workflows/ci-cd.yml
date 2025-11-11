@@ -3,29 +3,90 @@ name: CI-CD (dev → staging)
 on:
   push:
     branches: [ main ]
+    # Uncomment if you want runs only when these change:
+    # paths: [ 'hello.sh', '.github/workflows/**' ]
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # 1) TEST across a small matrix
   test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show runner info
+        run: uname -a || ver
+        shell: bash
+      - name: Run hello.sh (should fail if script has errors)
+        shell: bash
+        run: bash -eo pipefail ./hello.sh
+
+  # 2) PACKAGE once and upload an artifact
+  package:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run basic test
-        run: echo "Hello from CI/CD test step"
+      - name: Build artifact (dummy)
+        shell: bash
+        run: |
+          set -e
+          echo "build from ${GITHUB_SHA} at $(date -u)" > build.txt
+          echo "artifact created: build.txt"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: build.txt
 
+  # 3) DEPLOY to DEV automatically
   deploy_dev:
-    needs: test
+    needs: package
     runs-on: ubuntu-latest
-    environment: dev
+    environment:
+      name: dev
     steps:
-      - name: Deploy to DEV (simulated)
-        run: echo "Deployed to DEV environment"
+      - uses: actions/download-artifact@v4
+        with:
+          name: app
+          path: .
+      - name: Show artifact & run script in DEV
+        shell: bash
+        run: |
+          set -e
+          echo "=== DEV DEPLOY ==="
+          cat build.txt || true
+          bash -eo pipefail ./hello.sh
+          echo "Deployed to DEV"
 
+  # 4) DEPLOY to STAGING (requires approval in Environments)
   deploy_staging:
     needs: deploy_dev
     runs-on: ubuntu-latest
-    environment: staging
+    environment:
+      name: staging   # add Required reviewers in Settings → Environments → staging
     steps:
-      - name: Deploy to STAGING (simulated)
-        run: echo "Deployed to STAGING environment"
+      - uses: actions/download-artifact@v4
+        with:
+          name: app
+          path: .
+      - name: Show artifact & run script in STAGING
+        shell: bash
+        run: |
+          set -e
+          echo "=== STAGING DEPLOY ==="
+          cat build.txt || true
+          bash -eo pipefail ./hello.sh
+          echo "Deployed to STAGING"
